@@ -13,6 +13,7 @@ class LevelConfig {
   final List<int> starThresholds; // [1-star, 2-star, 3-star] scores
   final int? targetGoldFish; // Special objective: catch N gold fish
   final bool unlocked;
+  final bool useStack; // true = Stack Match-3 mode (hard), false = Classic mode
 
   const LevelConfig({
     required this.levelId,
@@ -28,6 +29,7 @@ class LevelConfig {
     required this.starThresholds,
     this.targetGoldFish,
     this.unlocked = false,
+    this.useStack = false,
   });
 
   /// Calculate star rating based on score
@@ -191,33 +193,35 @@ class LevelDatabase {
       stageId: 3,
       stageName: 'Meme Dimension',
       levelName: 'Meme Portal',
-      objective: 'Score 1000 points in 30 seconds!',
+      objective: '⚠️ STACK MODE! Match-3 to score 1000!',
       targetScore: 1000,
       timeLimit: 30,
       itemDropRate: 3.5,
       hazardFrequency: 0.25,
       itemSpeed: 1.8,
       starThresholds: [1000, 1600, 2400],
+      useStack: true,
     ),
     LevelConfig(
       levelId: 12,
       stageId: 3,
       stageName: 'Meme Dimension',
       levelName: 'Cucumber Storm',
-      objective: 'Survive the cucumber rain — Score 1500!',
+      objective: '⚠️ STACK MODE! Survive & match — Score 1500!',
       targetScore: 1500,
       timeLimit: 40,
       itemDropRate: 3.5,
       hazardFrequency: 0.35,
       itemSpeed: 1.9,
       starThresholds: [1500, 2200, 3000],
+      useStack: true,
     ),
     LevelConfig(
       levelId: 13,
       stageId: 3,
       stageName: 'Meme Dimension',
       levelName: 'Golden Feast',
-      objective: 'Catch 5 Gold Fish before time runs out!',
+      objective: '⚠️ STACK MODE! Match-3 + Catch 5 Gold Fish!',
       targetScore: 1200,
       timeLimit: 45,
       itemDropRate: 3.8,
@@ -225,32 +229,35 @@ class LevelDatabase {
       itemSpeed: 2.0,
       starThresholds: [1200, 2000, 3000],
       targetGoldFish: 5,
+      useStack: true,
     ),
     LevelConfig(
       levelId: 14,
       stageId: 3,
       stageName: 'Meme Dimension',
       levelName: 'Speed Demon',
-      objective: 'Score 2000 points — items fall FAST!',
+      objective: '⚠️ STACK MODE! Score 2000 — items fall FAST!',
       targetScore: 2000,
       timeLimit: 40,
       itemDropRate: 4.0,
       hazardFrequency: 0.30,
       itemSpeed: 2.2,
       starThresholds: [2000, 3000, 4500],
+      useStack: true,
     ),
     LevelConfig(
       levelId: 15,
       stageId: 3,
       stageName: 'Meme Dimension',
       levelName: 'Final Meme Boss',
-      objective: 'Score 3000 in the ultimate challenge!',
+      objective: '⚠️ STACK MODE! Score 3000 in the ultimate challenge!',
       targetScore: 3000,
       timeLimit: 50,
       itemDropRate: 4.5,
       hazardFrequency: 0.35,
       itemSpeed: 2.5,
       starThresholds: [3000, 4500, 6500],
+      useStack: true,
     ),
   ];
 

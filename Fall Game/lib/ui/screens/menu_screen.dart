@@ -3,19 +3,20 @@ import 'package:flutter/material.dart';
 import '../../game/config/game_config.dart';
 import '../../game/config/item_types.dart';
 import '../../game/managers/audio_manager.dart';
+import '../../game/managers/player_data.dart';
 
 /// Main Menu Screen with animated Meme Cat and neon pastel design
 class MenuScreen extends StatefulWidget {
   final VoidCallback onPlay;
   final VoidCallback onLevelSelect;
-  final Function(CatSkin) onSkinSelected;
+  final VoidCallback onShop;
   final CatSkin currentSkin;
 
   const MenuScreen({
     super.key,
     required this.onPlay,
     required this.onLevelSelect,
-    required this.onSkinSelected,
+    required this.onShop,
     required this.currentSkin,
   });
 
@@ -27,7 +28,6 @@ class _MenuScreenState extends State<MenuScreen> with TickerProviderStateMixin {
   late AnimationController _catBounceController;
   late AnimationController _titleController;
   late AnimationController _glowController;
-  bool _showSkinPicker = false;
 
   @override
   void initState() {
@@ -74,6 +74,9 @@ class _MenuScreenState extends State<MenuScreen> with TickerProviderStateMixin {
       child: SafeArea(
         child: Column(
           children: [
+            // Diamond counter at top
+            _buildDiamondHeader(),
+
             const Spacer(flex: 1),
 
             // === Animated Title ===
@@ -101,9 +104,6 @@ class _MenuScreenState extends State<MenuScreen> with TickerProviderStateMixin {
 
             // === Buttons ===
             _buildMenuButtons(),
-
-            // === Skin Picker ===
-            if (_showSkinPicker) _buildSkinPicker(),
 
             const Spacer(flex: 1),
 
@@ -226,6 +226,45 @@ class _MenuScreenState extends State<MenuScreen> with TickerProviderStateMixin {
     );
   }
 
+  Widget _buildDiamondHeader() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(20),
+              gradient: LinearGradient(
+                colors: [
+                  const Color(0xFF6366F1).withValues(alpha: 0.3),
+                  const Color(0xFF8B5CF6).withValues(alpha: 0.2),
+                ],
+              ),
+              border: Border.all(color: const Color(0xFF8B5CF6).withValues(alpha: 0.4)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('💎', style: TextStyle(fontSize: 16)),
+                const SizedBox(width: 6),
+                Text(
+                  '${PlayerData.instance.diamonds}',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildMenuButtons() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 40),
@@ -253,67 +292,16 @@ class _MenuScreenState extends State<MenuScreen> with TickerProviderStateMixin {
           ),
           const SizedBox(height: 12),
 
-          // SELECT CAT Button
+          // SHOP Button
           _MenuButton(
-            text: '🐱  SELECT CAT',
+            text: '🛍️  SHOP',
             gradient: const [GameConfig.primaryYellow, Color(0xFFFF8C00)],
             onTap: () {
               AudioManager.playClickSFX();
-              setState(() => _showSkinPicker = !_showSkinPicker);
+              widget.onShop();
             },
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildSkinPicker() {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 300),
-      margin: const EdgeInsets.only(top: 16),
-      padding: const EdgeInsets.all(16),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: CatSkin.values.map((skin) {
-          final isSelected = skin == widget.currentSkin;
-          return GestureDetector(
-            onTap: () {
-              AudioManager.playClickSFX();
-              widget.onSkinSelected(skin);
-            },
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              margin: const EdgeInsets.symmetric(horizontal: 6),
-              width: isSelected ? 64 : 52,
-              height: isSelected ? 64 : 52,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: isSelected
-                    ? skin.color.withValues(alpha: 0.3)
-                    : Colors.white.withValues(alpha: 0.1),
-                border: Border.all(
-                  color: isSelected ? skin.color : Colors.white24,
-                  width: isSelected ? 3 : 1,
-                ),
-                boxShadow: isSelected
-                    ? [
-                        BoxShadow(
-                          color: skin.color.withValues(alpha: 0.4),
-                          blurRadius: 12,
-                          spreadRadius: 2,
-                        ),
-                      ]
-                    : null,
-              ),
-              child: Center(
-                child: Text(
-                  skin.emoji,
-                  style: TextStyle(fontSize: isSelected ? 30 : 24),
-                ),
-              ),
-            ),
-          );
-        }).toList(),
       ),
     );
   }

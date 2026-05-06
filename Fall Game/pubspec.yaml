@@ -11,6 +11,8 @@ dependencies:
     sdk: flutter
   flame: ^1.19.0
   flame_audio: ^2.10.4
+  shared_preferences: ^2.3.0
+  web: ^1.1.0
   cupertino_icons: ^1.0.8
 
 dev_dependencies:

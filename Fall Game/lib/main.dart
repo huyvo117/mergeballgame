@@ -4,14 +4,16 @@ import 'package:flutter/services.dart';
 
 import 'game/cat_catcher_game.dart';
 import 'game/config/item_types.dart';
+import 'game/managers/player_data.dart';
 import 'ui/screens/menu_screen.dart';
 import 'ui/screens/level_select.dart';
+import 'ui/screens/shop_screen.dart';
 import 'ui/overlays/hud_overlay.dart';
 import 'ui/overlays/pause_overlay.dart';
 import 'ui/overlays/level_complete.dart';
 import 'ui/overlays/game_over.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Lock to portrait mode
@@ -27,6 +29,9 @@ void main() {
     systemNavigationBarColor: Color(0xFF1A0533),
     systemNavigationBarIconBrightness: Brightness.light,
   ));
+
+  // Load persistent player data before app starts
+  await PlayerData.instance.load();
 
   runApp(const CatCatcherApp());
 }
@@ -54,7 +59,7 @@ class CatCatcherApp extends StatelessWidget {
   }
 }
 
-/// App shell that manages navigation between menu, level select, and game
+/// App shell that manages navigation between menu, level select, shop, and game
 class AppShell extends StatefulWidget {
   const AppShell({super.key});
 
@@ -62,21 +67,24 @@ class AppShell extends StatefulWidget {
   State<AppShell> createState() => _AppShellState();
 }
 
-enum AppScreen { menu, levelSelect, game }
+enum AppScreen { menu, levelSelect, shop, game }
 
 class _AppShellState extends State<AppShell> {
   AppScreen _currentScreen = AppScreen.menu;
   late CatCatcherGame _game;
   CatSkin _selectedSkin = CatSkin.maxwell;
 
-  // Persistent progress across game sessions
-  final Set<int> _unlockedLevels = {1, 2};
-  final Map<int, int> _levelStars = {};
-
   @override
   void initState() {
     super.initState();
     _game = CatCatcherGame();
+
+    // Restore equipped character from saved data
+    final equippedName = PlayerData.instance.equippedCharacter;
+    _selectedSkin = CatSkin.values.firstWhere(
+      (s) => s.name == equippedName,
+      orElse: () => CatSkin.maxwell,
+    );
   }
 
   void _goToMenu() {
@@ -87,13 +95,19 @@ class _AppShellState extends State<AppShell> {
     setState(() => _currentScreen = AppScreen.levelSelect);
   }
 
+  void _goToShop() {
+    setState(() => _currentScreen = AppScreen.shop);
+  }
+
   void _startLevel(int levelId) {
     // Create a fresh game instance for each play session
     _game = CatCatcherGame();
     _game.selectedSkin = _selectedSkin;
-    // Copy progress from previous game if exists
-    _game.unlockedLevels.addAll(_unlockedLevels);
-    _game.levelStars.addAll(_levelStars);
+    // Sync progress from PlayerData
+    _game.unlockedLevels.addAll(PlayerData.instance.unlockedLevels);
+    for (final entry in PlayerData.instance.levelStars.entries) {
+      _game.levelStars[entry.key] = entry.value;
+    }
     _game.startLevel(levelId);
     setState(() => _currentScreen = AppScreen.game);
   }
@@ -137,7 +151,7 @@ class _AppShellState extends State<AppShell> {
           key: const ValueKey('menu'),
           onPlay: _playFirstLevel,
           onLevelSelect: _goToLevelSelect,
-          onSkinSelected: _onSkinSelected,
+          onShop: _goToShop,
           currentSkin: _selectedSkin,
         );
 
@@ -146,8 +160,16 @@ class _AppShellState extends State<AppShell> {
           key: const ValueKey('levels'),
           onLevelSelected: _startLevel,
           onBack: _goToMenu,
-          unlockedLevels: _game.unlockedLevels,
-          levelStars: _game.levelStars,
+          unlockedLevels: PlayerData.instance.unlockedLevels,
+          levelStars: PlayerData.instance.levelStars,
+        );
+
+      case AppScreen.shop:
+        return ShopScreen(
+          key: const ValueKey('shop'),
+          onBack: _goToMenu,
+          onSkinSelected: _onSkinSelected,
+          currentSkin: _selectedSkin,
         );
 
       case AppScreen.game:

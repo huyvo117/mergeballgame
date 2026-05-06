@@ -91,6 +91,41 @@ class _GameOverOverlayState extends State<GameOverOverlay>
                         fontSize: 14,
                       ),
                     ),
+                    const SizedBox(height: 12),
+                    // Consolation diamonds
+                    if (game.diamondsEarned > 0)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          color: const Color(0xFF8B5CF6).withValues(alpha: 0.15),
+                          border: Border.all(color: const Color(0xFF8B5CF6).withValues(alpha: 0.2)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Text('💎', style: TextStyle(fontSize: 16)),
+                            const SizedBox(width: 6),
+                            Text(
+                              '+${game.diamondsEarned}',
+                              style: const TextStyle(
+                                color: Color(0xFFFFD700),
+                                fontSize: 16,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              'consolation',
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.4),
+                                fontSize: 11,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     const SizedBox(height: 24),
                     // Retry
                     GestureDetector(

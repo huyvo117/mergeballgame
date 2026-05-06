@@ -33,6 +33,13 @@ class GameConfig {
   static const int baseCatchScore = 10;
   static const int comboBonusPerLevel = 5; // Extra points per combo level
 
+  // === Stack Match-3 ===
+  static const int maxStackSize = 7;        // Max items on plate
+  static const int match3Multiplier = 5;    // 3-match score multiplier
+  static const int match4Multiplier = 7;    // 4-match score multiplier
+  static const int match5Multiplier = 10;   // 5+ match score multiplier
+  static const int chainBonusPerLevel = 2;  // Extra multiplier per chain level
+
   // === Drop cooldown ===
   static const double minSpawnInterval = 0.3;
 

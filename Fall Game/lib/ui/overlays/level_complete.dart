@@ -111,6 +111,75 @@ class _LevelCompleteOverlayState extends State<LevelCompleteOverlay>
         _row('Score', '${game.score}'),
         _row('Max Combo', 'x${game.comboManager.maxCombo}'),
         _row('Items Caught', '${game.comboManager.totalCatches}'),
+        const SizedBox(height: 8),
+        // Per-item catch breakdown
+        if (game.comboManager.itemCatchCounts.isNotEmpty)
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(10),
+              color: Colors.white.withValues(alpha: 0.05),
+            ),
+            child: Wrap(
+              spacing: 10,
+              runSpacing: 6,
+              children: game.comboManager.itemCatchCounts.entries.map((e) {
+                return Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(e.key.emoji, style: const TextStyle(fontSize: 16)),
+                    const SizedBox(width: 3),
+                    Text(
+                      'x${e.value}',
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                );
+              }).toList(),
+            ),
+          ),
+        const SizedBox(height: 12),
+        // Diamond reward
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            gradient: LinearGradient(
+              colors: [
+                const Color(0xFF8B5CF6).withValues(alpha: 0.2),
+                const Color(0xFF6366F1).withValues(alpha: 0.1),
+              ],
+            ),
+            border: Border.all(color: const Color(0xFF8B5CF6).withValues(alpha: 0.3)),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Text('💎', style: TextStyle(fontSize: 20)),
+              const SizedBox(width: 8),
+              Text(
+                '+${game.diamondsEarned}',
+                style: const TextStyle(
+                  color: Color(0xFFFFD700),
+                  fontSize: 22,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                'Diamonds',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.6),
+                  fontSize: 14,
+                ),
+              ),
+            ],
+          ),
+        ),
         const SizedBox(height: 20),
         if (!isLast) _btn('▶  NEXT LEVEL', [GameConfig.primaryMint, GameConfig.primaryCyan], () { AudioManager.playClickSFX(); game.nextLevel(); }),
         if (!isLast) const SizedBox(height: 10),

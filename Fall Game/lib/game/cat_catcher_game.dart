@@ -11,6 +11,7 @@ import 'components/background.dart';
 import 'managers/item_manager.dart';
 import 'managers/combo_manager.dart';
 import 'managers/audio_manager.dart';
+import 'managers/player_data.dart';
 import 'config/game_config.dart';
 import 'config/level_config.dart';
 import 'config/item_types.dart';
@@ -26,6 +27,12 @@ class CatCatcherGame extends FlameGame
   int score = 0;
   int goldFishCaught = 0;
   double remainingTime = 0;
+  int diamondsEarned = 0; // Diamonds earned this level
+
+  // --- Stack Match-3 ---
+  final List<ItemType> itemStack = []; // Items on the plate (max 7)
+  int matchChainLevel = 0; // Current chain combo level
+  int totalMatches = 0; // Total match-3s this level
 
   // --- Current level ---
   late LevelConfig currentLevel;
@@ -52,6 +59,10 @@ class CatCatcherGame extends FlameGame
   // --- Fever particle timer ---
   double _feverParticleTimer = 0;
 
+  // --- Fever popup state ---
+  bool showFeverPopup = false;
+  double _feverPopupTimer = 0;
+
   // --- Pending level to start after onLoad ---
   int? _pendingLevelId;
   bool _isLoaded = false;
@@ -65,13 +76,17 @@ class CatCatcherGame extends FlameGame
   Future<void> onLoad() async {
     await super.onLoad();
 
+    // CRITICAL: Set camera anchor to topLeft so world (0,0) maps to screen top-left.
+    // Flame v1.19+ defaults to center, which causes the world to render offset.
+    camera.viewfinder.anchor = Anchor.topLeft;
+
     // Add background
     background = GameBackground();
     world.add(background);
 
     // Create player
     player = CatPlayer(skin: selectedSkin);
-    player.position = Vector2(size.x / 2, GameConfig.catY);
+    player.position = Vector2(size.x / 2, size.y - 100);
     world.add(player);
 
     // Create item manager (added as component for auto-update)
@@ -81,6 +96,7 @@ class CatCatcherGame extends FlameGame
     // Setup combo callbacks
     comboManager.onFeverChanged = _onFeverChanged;
     comboManager.onComboChanged = _onComboChanged;
+    comboManager.onFeverActivated = _onFeverPopup;
 
     _isLoaded = true;
 
@@ -97,9 +113,10 @@ class CatCatcherGame extends FlameGame
   @override
   void onGameResize(Vector2 size) {
     super.onGameResize(size);
-    // Update player Y position on resize
+    // Update player Y position and background on resize
     if (isMounted) {
       player.position.y = size.y - 100;
+      background.size = size.clone();
     }
   }
 
@@ -119,11 +136,24 @@ class CatCatcherGame extends FlameGame
     currentLevel = LevelDatabase.getLevel(levelId);
     score = 0;
     goldFishCaught = 0;
+    diamondsEarned = 0;
     remainingTime = currentLevel.timeLimit;
+
+    // Reset stack
+    itemStack.clear();
+    matchChainLevel = 0;
+    totalMatches = 0;
 
     // Reset managers
     comboManager.reset();
-    itemManager.configure(currentLevel);
+
+    // Bullet Time skill: reduce item fall speed by 25%
+    if (selectedSkin.hasSkill(CharSkill.bulletTime)) {
+      // Create a modified level config with reduced speed
+      itemManager.configure(currentLevel, speedOverride: currentLevel.itemSpeed * 0.75);
+    } else {
+      itemManager.configure(currentLevel);
+    }
 
     // Reset player
     player.position = Vector2(size.x / 2, size.y - 100);
@@ -216,6 +246,14 @@ class CatCatcherGame extends FlameGame
       return;
     }
 
+    // Fever popup auto-hide
+    if (showFeverPopup) {
+      _feverPopupTimer -= dt;
+      if (_feverPopupTimer <= 0) {
+        showFeverPopup = false;
+      }
+    }
+
     // Screen shake
     if (_shakeTimer > 0) {
       _shakeTimer -= dt;
@@ -291,47 +329,227 @@ class CatCatcherGame extends FlameGame
   // ============================
 
   void _onCatchItem(FallingItem item) {
-    // Calculate score
-    final points = comboManager.calculateScore(item.itemType.points);
-    score += points;
+    // Track per-item stats
+    comboManager.onCatch(itemType: item.itemType);
 
     // Track gold fish
     if (item.itemType == ItemType.goldFish) {
       goldFishCaught++;
     }
 
-    // Update combo
-    comboManager.onCatch();
-
     // Visual feedback
     item.triggerCatchAnimation();
     player.onCatchItem();
 
-    // Particles
+    // Catch sparkle at item position
     world.add(ParticleFx.catchSparkle(
       position: item.position.clone(),
       color: item.itemType.color,
     ));
+
+    // Audio — pitch scales with combo
+    AudioManager.playCatchSFX(comboManager.comboCount);
+    AudioManager.triggerCatchHaptic();
+
+    // === MODE BRANCHING ===
+    if (currentLevel.useStack) {
+      _onCatchItem_StackMode(item);
+    } else {
+      _onCatchItem_ClassicMode(item);
+    }
+  }
+
+  /// CLASSIC MODE: Catch = immediate score (Stage 1-2)
+  void _onCatchItem_ClassicMode(FallingItem item) {
+    // Calculate base points — Jelly Rain skill: +50% base points
+    int basePoints = item.itemType.points;
+    if (selectedSkin.hasSkill(CharSkill.jellyRain)) {
+      basePoints = (basePoints * 1.5).round();
+    }
+    final points = comboManager.calculateScore(basePoints);
+    score += points;
+
+    // Score popup
     world.add(ParticleFx.scorePopup(
       position: item.position.clone() + Vector2(0, -20),
       score: points,
       isFever: comboManager.isFever,
     ));
 
+    // Combo popup
     if (comboManager.comboCount > 1) {
       world.add(ParticleFx.comboPopup(
         position: player.position.clone() + Vector2(0, -50),
         comboCount: comboManager.comboCount,
       ));
-    }
-
-    // Audio
-    AudioManager.playCatchSFX();
-    AudioManager.triggerCatchHaptic();
-
-    if (comboManager.comboCount > 1) {
       AudioManager.playComboSFX(comboManager.comboCount);
     }
+  }
+
+  /// STACK MATCH-3 MODE: Catch = add to stack, match = score (Stage 3)
+  void _onCatchItem_StackMode(FallingItem item) {
+    itemStack.add(item.itemType);
+    player.updateStack(itemStack);
+
+    // Check for stack overflow FIRST
+    if (itemStack.length > GameConfig.maxStackSize) {
+      _onStackOverflow();
+      return;
+    }
+
+    // Then check for matches
+    matchChainLevel = 0;
+    _checkStackMatches();
+  }
+
+  /// Match-3 detection: find 3+ adjacent same items in the stack
+  void _checkStackMatches() {
+    if (itemStack.length < 3) return;
+
+    // Scan for groups of 3+ adjacent same items
+    int matchStart = -1;
+    int matchLen = 0;
+
+    for (int i = 0; i < itemStack.length; i++) {
+      if (i == 0 || itemStack[i] != itemStack[i - 1]) {
+        // Check if previous group was a match
+        if (matchLen >= 3) break;
+        matchStart = i;
+        matchLen = 1;
+      } else {
+        matchLen++;
+      }
+    }
+    // Check last group too
+    if (matchLen < 3) {
+      // Also check from matchStart forward
+      matchStart = -1;
+      matchLen = 0;
+      for (int i = 0; i < itemStack.length; i++) {
+        if (matchStart == -1) {
+          matchStart = i;
+          matchLen = 1;
+        } else if (itemStack[i] == itemStack[matchStart]) {
+          matchLen++;
+        } else {
+          if (matchLen >= 3) break;
+          matchStart = i;
+          matchLen = 1;
+        }
+      }
+    }
+
+    if (matchLen >= 3 && matchStart >= 0) {
+      _explodeMatch(matchStart, matchLen);
+    }
+  }
+
+  /// Explode matched items from the stack
+  void _explodeMatch(int startIdx, int count) {
+    // Get matched item type for scoring
+    final matchedType = itemStack[startIdx];
+    matchChainLevel++;
+    totalMatches++;
+
+    // Calculate score multiplier based on match length
+    int multiplier;
+    if (count >= 5) {
+      multiplier = GameConfig.match5Multiplier;
+    } else if (count == 4) {
+      multiplier = GameConfig.match4Multiplier;
+    } else {
+      multiplier = GameConfig.match3Multiplier;
+    }
+
+    // Chain bonus
+    multiplier += (matchChainLevel - 1) * GameConfig.chainBonusPerLevel;
+
+    // Calculate points
+    int basePoints = matchedType.points * count;
+    if (selectedSkin.hasSkill(CharSkill.jellyRain)) {
+      basePoints = (basePoints * 1.5).round();
+    }
+    final points = basePoints * multiplier;
+    score += points;
+
+    // Energy from energy items being matched
+    if (matchedType.isEnergyItem) {
+      for (int i = 0; i < count; i++) {
+        comboManager.onCatch(itemType: matchedType);
+      }
+    }
+
+    // Remove matched items from stack
+    itemStack.removeRange(startIdx, startIdx + count);
+    player.updateStack(itemStack);
+
+    // Visual: match explosion particles at player position
+    for (int i = 0; i < count; i++) {
+      final offsetY = -(startIdx + i) * 18.0 - 30;
+      world.add(ParticleFx.catchSparkle(
+        position: player.position.clone() + Vector2(0, offsetY),
+        color: matchedType.color,
+      ));
+    }
+
+    // Score popup
+    world.add(ParticleFx.scorePopup(
+      position: player.position.clone() + Vector2(0, -80),
+      score: points,
+      isFever: comboManager.isFever,
+    ));
+
+    // Combo popup for chain
+    if (matchChainLevel > 1) {
+      world.add(ParticleFx.comboPopup(
+        position: player.position.clone() + Vector2(0, -120),
+        comboCount: matchChainLevel,
+      ));
+    }
+
+    // Audio — Match-3 explosion chord
+    AudioManager.playMatchSFX(count);
+    AudioManager.triggerCatchHaptic();
+
+    // Screen shake for big matches
+    if (count >= 4) {
+      _shakeTimer = 0.2;
+      _shakeIntensity = 3;
+    }
+
+    // Check for chain matches after removal
+    Future.delayed(const Duration(milliseconds: 200), () {
+      if (gameState == GameState.playing) {
+        _checkStackMatches();
+      }
+    });
+  }
+
+  /// Stack overflow — Game Over!
+  void _onStackOverflow() {
+    gameState = GameState.gameOver;
+    itemManager.stop();
+
+    // Screen shake
+    _shakeTimer = 0.5;
+    _shakeIntensity = 8;
+
+    // Particles explosion from stack
+    for (int i = 0; i < itemStack.length; i++) {
+      world.add(ParticleFx.hazardExplosion(
+        position: player.position.clone() + Vector2(0, -i * 18.0 - 30),
+      ));
+    }
+
+    // Diamond consolation
+    if (score > 0) {
+      diamondsEarned = 3;
+      PlayerData.instance.addDiamonds(diamondsEarned);
+    }
+
+    AudioManager.playGameOverSFX();
+    AudioManager.triggerHazardHaptic();
+    overlays.add('gameOver');
   }
 
   void _onMissItem() {
@@ -339,7 +557,12 @@ class CatCatcherGame extends FlameGame
   }
 
   void _onHitHazard(HazardItem hazard) {
-    // Penalty
+    // Stack mode: remove top item from stack
+    if (currentLevel.useStack && itemStack.isNotEmpty) {
+      itemStack.removeLast();
+      player.updateStack(itemStack);
+    }
+    // Apply score penalty
     score = (score - hazard.hazardType.penalty).clamp(0, 999999);
 
     // Break combo
@@ -348,6 +571,11 @@ class CatCatcherGame extends FlameGame
     // Visual feedback
     hazard.triggerHitAnimation();
     player.onHitHazard();
+
+    // Slow debuff from Toxic Fish Jar
+    if (hazard.hazardType.appliesSlow) {
+      player.applySlow(hazard.hazardType.slowDuration);
+    }
 
     // Screen shake
     _shakeTimer = 0.3;
@@ -374,13 +602,23 @@ class CatCatcherGame extends FlameGame
       AudioManager.triggerFeverHaptic();
       _shakeTimer = 0.5;
       _shakeIntensity = 3;
+      // Start pattern spawning during fever
+      itemManager.startFeverSpawning();
     } else {
       AudioManager.resumeNormalBGM();
+      // Return to regular spawning
+      itemManager.stopFeverSpawning();
     }
   }
 
   void _onComboChanged(int combo) {
     // Combo changed — UI will read this from comboManager
+  }
+
+  /// Triggered when Fever is activated — show massive popup
+  void _onFeverPopup() {
+    showFeverPopup = true;
+    _feverPopupTimer = 2.5; // Show for 2.5 seconds
   }
 
   // ============================
@@ -412,6 +650,25 @@ class CatCatcherGame extends FlameGame
     // Unlock next level if objective met
     if (objectiveMet && currentLevelId < LevelDatabase.totalLevels) {
       unlockedLevels.add(currentLevelId + 1);
+    }
+
+    // === Diamond rewards ===
+    if (objectiveMet && stars > 0) {
+      diamondsEarned = PlayerData.diamondRewardForStars(stars);
+    } else if (score > 0) {
+      diamondsEarned = 3; // Consolation
+    } else {
+      diamondsEarned = 0;
+    }
+    if (diamondsEarned > 0) {
+      PlayerData.instance.addDiamonds(diamondsEarned);
+    }
+
+    // Sync progress to PlayerData
+    if (objectiveMet) {
+      PlayerData.instance.updateLevelProgress(
+        currentLevelId, stars, LevelDatabase.totalLevels,
+      );
     }
 
     if (objectiveMet) {

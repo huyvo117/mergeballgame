@@ -1,6 +1,7 @@
 import '../config/game_config.dart';
+import '../config/item_types.dart';
 
-/// Manages the combo counter and Fever Mode
+/// Manages the combo counter, Energy Bar, Fever Mode, and per-item catch tracking
 class ComboManager {
   int _comboCount = 0;
   bool _isFever = false;
@@ -8,9 +9,16 @@ class ComboManager {
   int _totalCatches = 0;
   int _maxCombo = 0;
 
+  // Energy Bar (0.0 – 1.0)
+  double _energy = 0;
+
+  // Per-item catch counts (for detailed result screen)
+  final Map<ItemType, int> _itemCatchCounts = {};
+
   // Callbacks
   void Function(int combo)? onComboChanged;
   void Function(bool isFever)? onFeverChanged;
+  void Function()? onFeverActivated; // One-shot callback for popup
 
   /// Current combo count
   int get comboCount => _comboCount;
@@ -21,11 +29,11 @@ class ComboManager {
   /// Remaining fever time
   double get feverTimer => _feverTimer;
 
-  /// Fever progress (0.0 - 1.0) towards activation
-  double get feverProgress =>
-      _comboCount < GameConfig.feverComboThreshold
-          ? _comboCount / GameConfig.feverComboThreshold
-          : 1.0;
+  /// Energy progress (0.0 – 1.0) — fills by catching Energy Items
+  double get energy => _energy;
+
+  /// Fever progress for HUD bar (combo-based fallback OR energy-based)
+  double get feverProgress => _energy;
 
   /// Total catches in this session
   int get totalCatches => _totalCatches;
@@ -33,8 +41,11 @@ class ComboManager {
   /// Maximum combo achieved
   int get maxCombo => _maxCombo;
 
+  /// Per-item catch counts for result screen
+  Map<ItemType, int> get itemCatchCounts => Map.unmodifiable(_itemCatchCounts);
+
   /// Register a successful catch
-  void onCatch() {
+  void onCatch({ItemType? itemType}) {
     _comboCount++;
     _totalCatches++;
 
@@ -42,10 +53,20 @@ class ComboManager {
       _maxCombo = _comboCount;
     }
 
+    // Track per-item counts
+    if (itemType != null) {
+      _itemCatchCounts[itemType] = (_itemCatchCounts[itemType] ?? 0) + 1;
+    }
+
+    // Energy items fill the energy bar
+    if (itemType != null && itemType.isEnergyItem) {
+      _energy = (_energy + itemType.energyPercent / 100.0).clamp(0.0, 1.0);
+    }
+
     onComboChanged?.call(_comboCount);
 
-    // Check fever activation
-    if (!_isFever && _comboCount >= GameConfig.feverComboThreshold) {
+    // Check fever activation via Energy Bar (100%)
+    if (!_isFever && _energy >= 1.0) {
       _activateFever();
     }
 
@@ -94,7 +115,9 @@ class ComboManager {
   void _activateFever() {
     _isFever = true;
     _feverTimer = GameConfig.feverDuration;
+    _energy = 0; // Reset energy bar after triggering fever
     onFeverChanged?.call(true);
+    onFeverActivated?.call(); // Trigger popup
   }
 
   void _deactivateFever() {
@@ -110,5 +133,7 @@ class ComboManager {
     _feverTimer = 0;
     _totalCatches = 0;
     _maxCombo = 0;
+    _energy = 0;
+    _itemCatchCounts.clear();
   }
 }

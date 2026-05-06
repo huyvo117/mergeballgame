@@ -13,7 +13,10 @@ class GameBackground extends PositionComponent {
   @override
   Future<void> onLoad() async {
     await super.onLoad();
-    size = findGame()?.size ?? Vector2(GameConfig.designWidth, GameConfig.designHeight);
+    final gameSize = findGame()?.size ?? Vector2(GameConfig.designWidth, GameConfig.designHeight);
+    size = gameSize.clone();
+    position = Vector2.zero();
+    anchor = Anchor.topLeft;
     priority = -1000; // Behind everything
 
     // Generate floating dots
